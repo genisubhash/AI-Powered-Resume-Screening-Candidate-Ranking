@@ -29,12 +29,11 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
 # --------------------------------------------
-# OIDC FUNCTIONS
+# OIDC FUNCTIONS (FIXED)
 # --------------------------------------------
 def get_oauth_client(state=None):
     return OAuth2Session(
-        CLIENT_ID,
-        CLIENT_SECRET,
+        client_id=CLIENT_ID,              # FIX: do NOT pass client_secret here
         redirect_uri=REDIRECT_URI,
         scope="openid email profile",
         state=state
@@ -59,7 +58,7 @@ def login_button():
 def fetch_user(code):
     oauth = get_oauth_client()
 
-    # ⭐ IMPORTANT FIX — REQUIRED FOR GOOGLE OIDC
+    # ⭐ FINAL FIX: Correct token fetch for Google OIDC
     token = oauth.fetch_token(
         TOKEN_URL,
         code=code,
@@ -70,6 +69,7 @@ def fetch_user(code):
 
     resp = oauth.get(USERINFO_URL, token=token)
     return resp.json() if resp.status_code == 200 else None
+
 
 # --------------------------------------------
 # TEXT CLEANING
@@ -94,7 +94,7 @@ def extract_text_from_pdf(uploaded_file):
     return text
 
 # --------------------------------------------
-# TRAINING MODEL
+# MODEL TRAINING
 # --------------------------------------------
 def train_model(df):
     st.info("🔄 Cleaning dataset...")
@@ -107,7 +107,7 @@ def train_model(df):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    st.info("🔄 Training...")
+    st.info("🔄 Training model...")
     clf = LogisticRegression(max_iter=3000)
     clf.fit(X_train, y_train)
 
@@ -123,20 +123,21 @@ def train_model(df):
 # --------------------------------------------
 st.title("🔐 Welcome to AI Resume Screener")
 
-params = st.experimental_get_query_params()
+params = st.query_params  # updated from old experimental API
 
 if "user" not in st.session_state:
 
-    # Returned from Google OAuth
+    # Returned with ?code=... from Google
     if "code" in params:
-        user = fetch_user(params["code"][0])
+        user = fetch_user(params["code"])
 
         if user:
             st.session_state["user"] = user
-            st.experimental_set_query_params()
-            st.experimental_rerun()
+            st.query_params.clear()
+            st.rerun()
         else:
-            st.error("Google login failed.")
+            st.error("Google login failed. Please try again.")
+
     else:
         st.write("Please sign in to continue.")
         login_button()
@@ -150,7 +151,7 @@ st.success(f"Logged in as: {user['email']}")
 
 if st.sidebar.button("Logout"):
     st.session_state.clear()
-    st.experimental_rerun()
+    st.rerun()
 
 # --------------------------------------------
 # SIDEBAR
