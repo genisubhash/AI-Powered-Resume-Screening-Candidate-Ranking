@@ -1,6 +1,9 @@
+authlib
 streamlit
 pandas
 numpy
+scikit-learn
+sqlalchemy
 scikit-learn
 PyPDF2
 pdfplumber
