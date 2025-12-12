@@ -16,7 +16,7 @@ from authlib.integrations.requests_client import OAuth2Session
 st.set_page_config(page_title="AI Resume Screener", page_icon="🤖", layout="wide")
 
 # --------------------------------------------
-# GOOGLE OIDC CONFIG (FROM STREAMLIT SECRETS)
+# GOOGLE OIDC CONFIG
 # --------------------------------------------
 OAUTH = st.secrets["google_oauth"]
 
@@ -29,7 +29,7 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
 # --------------------------------------------
-# OIDC HANDLERS
+# OIDC FUNCTIONS
 # --------------------------------------------
 def get_oauth_client(state=None):
     return OAuth2Session(
@@ -58,7 +58,16 @@ def login_button():
 
 def fetch_user(code):
     oauth = get_oauth_client()
-    token = oauth.fetch_token(TOKEN_URL, code=code, client_secret=CLIENT_SECRET)
+
+    # ⭐ IMPORTANT FIX — REQUIRED FOR GOOGLE OIDC
+    token = oauth.fetch_token(
+        TOKEN_URL,
+        code=code,
+        client_secret=CLIENT_SECRET,
+        grant_type="authorization_code",
+        include_client_id=True
+    )
+
     resp = oauth.get(USERINFO_URL, token=token)
     return resp.json() if resp.status_code == 200 else None
 
@@ -91,16 +100,14 @@ def train_model(df):
     st.info("🔄 Cleaning dataset...")
     df["Resume"] = df["Resume"].apply(clean_text)
 
-    st.info("🔄 Extracting features with TF-IDF...")
+    st.info("🔄 Extracting features...")
     tfidf = TfidfVectorizer(stop_words="english", max_features=5000)
     X = tfidf.fit_transform(df["Resume"])
     y = df["Category"]
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    st.info("🔄 Training model...")
+    st.info("🔄 Training...")
     clf = LogisticRegression(max_iter=3000)
     clf.fit(X_train, y_train)
 
@@ -118,10 +125,9 @@ st.title("🔐 Welcome to AI Resume Screener")
 
 params = st.experimental_get_query_params()
 
-# UNAUTHENTICATED USER
 if "user" not in st.session_state:
 
-    # IF GOOGLE REDIRECTED BACK
+    # Returned from Google OAuth
     if "code" in params:
         user = fetch_user(params["code"][0])
 
@@ -130,15 +136,14 @@ if "user" not in st.session_state:
             st.experimental_set_query_params()
             st.experimental_rerun()
         else:
-            st.error("Google login failed. Try again.")
-
+            st.error("Google login failed.")
     else:
         st.write("Please sign in to continue.")
         login_button()
         st.stop()
 
 # --------------------------------------------
-# USER IS LOGGED IN — SHOW APP
+# USER LOGGED IN
 # --------------------------------------------
 user = st.session_state["user"]
 st.success(f"Logged in as: {user['email']}")
@@ -148,7 +153,7 @@ if st.sidebar.button("Logout"):
     st.experimental_rerun()
 
 # --------------------------------------------
-# SIDEBAR MENU
+# SIDEBAR
 # --------------------------------------------
 st.sidebar.title("📌 Navigation")
 menu = st.sidebar.radio("Select Mode", ["📚 Train Model", "🔮 Predict Resume"])
@@ -158,7 +163,6 @@ menu = st.sidebar.radio("Select Mode", ["📚 Train Model", "🔮 Predict Resume
 # --------------------------------------------
 if menu == "📚 Train Model":
     st.title("📚 Train Resume Classification Model")
-
     dataset = st.file_uploader("Upload CSV Dataset", type=["csv"])
 
     if dataset:
@@ -175,20 +179,18 @@ if menu == "📚 Train Model":
 elif menu == "🔮 Predict Resume":
 
     st.title("🔮 AI Resume Screening & Ranking")
-
     uploaded_file = st.file_uploader("Upload Resume (PDF/TXT)", type=["pdf", "txt"])
 
     if uploaded_file:
 
-        # Load Model
+        # Load saved model
         try:
             tfidf = pickle.load(open("tfidf.pkl", "rb"))
             clf = pickle.load(open("clf.pkl", "rb"))
         except:
-            st.error("Model files not found. Train the model first.")
+            st.error("Model not found. Train the model first.")
             st.stop()
 
-        # Extract Resume Text
         if uploaded_file.type == "application/pdf":
             resume_text = extract_text_from_pdf(uploaded_file)
         else:
@@ -197,10 +199,9 @@ elif menu == "🔮 Predict Resume":
         cleaned = clean_text(resume_text)
         X = tfidf.transform([cleaned])
 
-        # Predict
         pred = clf.predict(X)[0]
         proba = clf.predict_proba(X)[0]
-        score = round(max(proba)*100, 2)
+        score = round(max(proba) * 100, 2)
 
         st.success(f"Predicted Category: **{pred}**")
         st.warning(f"Ranking Score: **{score}%**")
