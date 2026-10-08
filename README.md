@@ -150,7 +150,7 @@ This project is licensed under the **MIT License**.
 ---
 
 ## 👤 Author
-**Subhash Yadav**  
-AI & Machine Learning Developer
+**Subhash Babu Geni**  
+Python , AI & Machine Learning Developer
 
 If you like this project, consider giving it a ⭐ on GitHub!
